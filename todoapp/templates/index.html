@@ -11,13 +11,12 @@
     list-style: none; /*Remove the bullet points*/
     padding:0; /*Remove the padding*/
     margin: 0; /*   Remove the margin*/
-    width: 200px; /*Set the width of the unordered list*/
+    width: 300px; /*Set the width of the unordered list*/
     }
     li {
         clear:both; /*Clear the float*/
     }
     li button {
-        -webkit-appearance: none; /*Remove the default button style*/
         border: none; /*Remove the border*/
         outline: none;/*Remove the outline*/
         color: red;/*Set the color of the button to red*/
@@ -25,24 +24,87 @@
         cursor: pointer;/*  Set the cursor to pointer*/
         font-size: 20px;/*Set the font size to 20px*/
         background-color: transparent;/*Set the background color to transparent*/
+    }
+    .lists-wrapper, .todos-wrapper {
+        display: inline-block; /*Display the lists-wrapper as an inline block*/
+        vertical-align: top; /*Align the lists-wrapper to the top*/
     }   
 </style>
 <body>
-    <form id="form">
-        <input type="text" id="description" name="description" />
-        <input type="submit" value="Create" />
-    </form>
-    <div id="error" class="hidden">Something went wrong!</div>
-    <ul id="todos">
-        {% for d in data %}
-        <li>
-             <input class = "check-completed" data-id="{{ d.id }}" type = "checkbox" {% if d.completed %} checked {% endif %} />
-              {{d.description }}
-              <button class = "delete-item" data-id="{{ d.id }}">&cross;</button>
+    <div class="lists-wrapper">
+        <form id="lists-form">
+            <input type="text" id="name" name="name" />
+            <input type="submit" value="Create" />
+        </form>
+
+        <ul id="lists">
+            {% for list in lists %}
+            <li>
+                <input class = "list-check-completed" data-id="{{ list.id }}"  type = "checkbox"/>
+                <a href="/lists/{{ list.id }}">{{ list.name }}</a>
+                <button class = "delete-list" data-id="{{ list.id }}">&cross;</button>
             </li>
-        {% endfor %}
-    </ul>
+            {% endfor %}
+        </ul>       
+    </div>
+
+    <div class="todos-wrapper">
+        <h4>{{ active_list.name }}</h4>
+        <form id="form">
+            <input type="text" id="description" name="description" />
+            <input type="hidden" id="list_id" value="{{ active_list.id }}" />
+            <input type="submit" value="Create" />
+        </form>
+
+        <div id="error" class="hidden">Something went wrong!</div>
+        <ul id="todos">
+            {% for todo in todos %}
+            <li>
+                 <input class = "check-completed" data-id="{{ todo.id }}" data-list-id="{{ todo.list_id }}" type = "checkbox" {% if todo.completed %} checked {% endif %} />
+                  {{todo.description }}
+                  <button class = "delete-item" data-id="{{ todo.id }}">&cross;</button>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    
+
     <script>
+            //Add an event listener to the lists form
+            document.getElementById('lists-form').onsubmit = function(e) {
+            e.preventDefault();
+            fetch('/lists/create', {
+                method: 'POST',
+                body: JSON.stringify({
+                    'name': document.getElementById('name').value
+                }),
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(function(response) {
+                return response.json();//return a json string 
+            })
+            
+            .then(function(jsonResponse) {//Parse the json string
+                console.log(jsonResponse);
+                //create a list item to be appended to the inorder list
+                const LiItem = document.createElement('LI');
+                //update the list item with the name
+                LiItem.innerHTML = jsonResponse['name'];
+                //append the list item to the unordered list
+                document.getElementById('lists').appendChild(LiItem);
+                //hide the error message
+                document.getElementById('error').className = 'hidden';
+                window.location.reload(true);
+            })
+            //Optional catch block
+            .catch(function() {
+                //display the error message
+                document.getElementById('error').className = '';
+            });
+        }
         //Get all the delete buttons
         const deleteButtons = document.querySelectorAll('.delete-item');
         for(let i=0; i<deleteButtons.length;i++){
@@ -67,7 +129,32 @@
                 });
             }
         }
-        //Get all the checkboxes
+        //Get all the delete list buttons
+        const deleteListButtons = document.querySelectorAll('.delete-list');
+        for(let i=0; i<deleteListButtons.length;i++){
+            const deleteButton = deleteListButtons[i];
+            deleteButton.onclick = function(e){
+                console.log('event', e);
+                const listId = e.target.dataset['id'];
+                fetch('/lists/' + listId + '/delete', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+
+                })
+                .then(function(response){
+                    // Remove the list item from the unordered list
+                    e.target.parentElement.remove();
+                    window.location.reload(true);
+                    document.getElementById('error').className = 'hidden';
+                })
+                .catch(function(){
+                    document.getElementById('error').className = '';
+                });
+            }
+        }        
+        //Get all the checkboxes todos
         const checkboxes = document.querySelectorAll('.check-completed');
         for(let i=0; i<checkboxes.length;i++){
             const checkbox = checkboxes[i];
@@ -93,6 +180,42 @@
             }
         }
 
+        //Get all the checkboxes lists
+        const listcheckboxes = document.querySelectorAll('.list-check-completed');
+        for(let i=0; i<listcheckboxes.length;i++){
+            const checkbox = listcheckboxes[i];
+            checkbox.onchange = function(e){
+                if(e.target.checked){
+                console.log('event', e);
+
+                const listId = e.target.dataset['id'];
+                fetch('/lists/' + listId +'/set-completed', {
+                    method: 'POST',
+                
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(function(response){
+                    document.getElementById('error').className = 'hidden';
+                    const todoCheckboxes = document.querySelectorAll('.check-completed');
+                    
+                    for (let i=0; i<todoCheckboxes.length; i++){
+                    
+                        if(todoCheckboxes[i].dataset['listId'] == listId)
+                        todoCheckboxes[i].checked = true;
+                    }
+                })
+                .catch(function(){
+                    document.getElementById('error').className = '';
+                });
+
+
+                }               
+
+            }
+        }
+
 
 
         //Add an event listener to the form
@@ -101,7 +224,8 @@
             fetch('/todos/create', {
                 method: 'POST',
                 body: JSON.stringify({
-                    'description': document.getElementById('description').value
+                    'description': document.getElementById('description').value,
+                    'list_id' : document.getElementById('list_id').value
                 }),
                 headers: {
                     'Content-Type': 'application/json'
@@ -121,6 +245,7 @@
                 document.getElementById('todos').appendChild(LiItem);
                 //hide the error message
                 document.getElementById('error').className = 'hidden';
+                window.location.reload(true);
             })
             //Optional catch block
             .catch(function() {
